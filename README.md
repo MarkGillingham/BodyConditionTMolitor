@@ -6,7 +6,7 @@ The script can also be visualised here: https://markgillingham.github.io/BodyCon
 
 ### Rscripts
 1. Script.Rmd: rmarkdown script to reproduce most of the analyeses
-2. Script.html: htlm version of the rmardown script
+2. index.html: htlm version of the rmardown script
 
 ### Data
 1. Repetability.txt: data used to calculate morphometric repeatability
