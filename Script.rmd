@@ -1,0 +1,818 @@
+---
+title: 'Size matters, so does condition: the use of a body condition index reveals the costs and benefits of structural body size in an insect.'
+author: "Mark Gillingham"
+date: "`r Sys.Date()`"
+#output: pdf_document
+output: html_document
+---
+
+## Load packages
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE, results="hide"}
+library(rptR)
+library(smatr)
+library(dplyr)
+library(MASS)
+library(MuMIn)
+library(boot)
+library(ggplot2)
+library(car)
+library(grid)
+library(gtable)
+library(gridExtra)
+library(ggpubr)
+library(grid)
+library(multcomp)
+library(finalfit)
+library(lmodel2)
+```
+
+## Load source files
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE, results="hide"}
+setwd("~/Dropbox/condition/ANALYSE/FinalAnalysis")
+Rep= read.table(file = "Repetability.txt", header = TRUE)
+Rep<-Rep[which(Rep$FecondIncomplet==0),]
+names(Rep)
+INDICES= read.csv(file = "CALCULINDICES.csv", header = TRUE)
+INDICES<-INDICES[which(INDICES$FecondIncomplet==0),]
+names(INDICES)
+head(INDICES)
+dosages= read.csv(file = "DOSAGES.csv", header = TRUE)
+names(dosages)
+Fecond= read.csv(file = "FeconditePropreNew.csv", header = TRUE)
+Fecond<-Fecond[which(!Fecond$Days.laid=="NA" & !Fecond$Mort==1),]
+names(Fecond)
+```
+
+
+## Validation of structural size and body condition indexes as measure of absolute and relative energy reserves respectively
+
+We first set out to validate whether morphometric measures and BCIs were reliable indicators of energy reserves. To that effect, we first tested the repeatability of the morphometric measure elytron length using the R package “rptR” and the strength of its correlation with mass (Stoffel and Nakagawa, 2017), both important preconditions of valid BCIs using these metrics (Peig and Green 2009; 2010).
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+rpt(longueur~(1|individus),data=Rep,grname = "individus",nboot=10000,datatype="Gaussian") 
+cor.test(log10(INDICES$moylargeur),log10(INDICES$moyLong))
+
+png("/home/mark/Dropbox/condition/apres JEB/loglargeurLongueur.png",width=2100, height=2970,res=300)
+plot(log(INDICES$moyLong)~log(INDICES$poids),ylab="log (mass (g))",xlab="log (elytron length (mm))")
+dev.off()
+
+plot(log(INDICES$moyLong)~log(INDICES$poids),ylab="log (mass (g))",xlab="log (elytron length (mm))")
+```
+
+Our measures of elytron length were significantly repeatable (p < 0.05) with an R [95%CI] of 0.921 [0.902, 0.936] and were strongly correlated with mass (Pearson’s correlation [95% confidence intervals]; r = 0.776 [0.729; 0.816]). Our results confirm that elytron length is an ideal indicator of structural size in our insect given its high repeatability in measurement and its strong correlation with mass. Moreover, its size is fixed after hatching from the pupal stage, since the cuticle gets tanned and sclerotized after emergence (i.e. it does not vary during the life of the insect)
+
+
+Second, we investigated Pearson correlations between measures of energy reserves and morphometric measures as well as with BCIs. We also performed partial correlation between mass and each measure of energy reserve controlling for elytron length. Prior to correlations all morphometric measures and energetic reserves were log transformed.
+
+
+We calculate BCIs:
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+M1<-lm(log(poids)~log(moyLong),data=INDICES)
+summary(M1)
+INDICES$OLS<-residuals(M1)
+M2 <- sma(poids~moyLong ,log="xy",data=INDICES)
+print(M2)
+INDICES$SMI<- INDICES$poids*((mean(INDICES$moyLong)/INDICES$moyLong)^M2$groupsummary$Slope)
+
+BCIs<-data.frame(individu=INDICES$individu,OLS=INDICES$OLS,SMI=INDICES$SMI)
+
+dosages<-(left_join(dosages,BCIs, by = "individu"))
+
+```
+
+As there was a strong correlation between circulating sugars and glycogen in the beetles, we considered both compounds together in the results.
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+cor.test(log(dosages$glucose),log(dosages$glycogen),method="pearson")
+
+png("/home/mark/Dropbox/condition/apres JEB/GlucoseGlycogen.png",width=2100, height=2100,res=300)
+dev.off()
+
+plot(log(dosages$glucose)~log10(dosages$glycogen),ylab="Glucose",xlab="Glycogen")
+```
+
+
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE, results="hide"}
+M3 <- sma(lipides~moyLong ,log="xy",data=dosages)
+print(M3)
+dosages$SLipides<- dosages$lipides*((mean(dosages$moyLong)/dosages$moyLong)^ M3$groupsummary$Slope)
+M4 <- sma(sumLGly~moyLong ,log="xy",data=dosages)
+print(M4)
+dosages$SsumLGly<- dosages$sumLGly*((mean(dosages$moyLong)/dosages$moyLong)^M4$groupsummary$Slope)
+```
+
+We estimate correlations between measures of energy reserves and morphometric measures as well as with BCIs:
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+cor.test(log(dosages$moyLong),log(dosages$lipides),method="pearson")
+cor.test(log(dosages$moyLong),log(dosages$sumLGly),method="pearson")
+cor.test(log(dosages$poids),log(dosages$lipides),method="pearson")
+cor.test(log(dosages$poids),log(dosages$sumLGly),method="pearson")
+cor.test(log(dosages$poids),log(dosages$SLipides),method="pearson")
+cor.test(log(dosages$poids),log(dosages$SsumLGly),method="pearson")
+
+#par(mfrow=c(3,2))
+plot(log(dosages$moyLong),log(dosages$lipides),ylab="Elytron length (mm)",xlab="Lipids")
+plot(log(dosages$moyLong),log(dosages$sumLGly),ylab="Elytron length (mm)",xlab="Glucose+Glycogen")
+plot(log(dosages$poids),log(dosages$lipides),ylab="Body mass (g)",xlab="Lipids")
+plot(log(dosages$poids),log(dosages$sumLGly),ylab="Body mass (g)",xlab="Glucose+Glycogen")
+plot(log(dosages$poids),log(dosages$SLipides),ylab="Body mass (g)",xlab="Scaled lipids")
+plot(log(dosages$poids),log(dosages$SsumLGly),ylab="Body mass (g)",xlab="Scaled glucose+glycogen")
+
+cor.test(dosages$OLS,log(dosages$lipides),method="pearson")
+cor.test(dosages$OLS,log(dosages$sumLGly),method="pearson")
+cor.test(dosages$OLS,log(dosages$SLipides),method="pearson")
+cor.test(dosages$OLS,log(dosages$SsumLGly),method="pearson")
+
+cor.test(dosages$SMI,log(dosages$lipides),method="pearson")
+cor.test(dosages$SMI,log(dosages$sumLGly),method="pearson")
+cor.test(dosages$SMI,log(dosages$SLipides),method="pearson")
+cor.test(dosages$SMI,log(dosages$SsumLGly),method="pearson")
+
+#par(mfrow=c(4,2))
+plot(dosages$OLS,log(dosages$lipides),ylab="OLS residuals",xlab="Lipids")
+plot(dosages$OLS,log(dosages$sumLGly),ylab="OLS residuals",xlab="Glucose+glycogen")
+plot(dosages$OLS,log(dosages$SLipides),ylab="OLS residuals",xlab="Scaled lipids")
+plot(dosages$OLS,log(dosages$SsumLGly),ylab="OLS residuals",xlab="Scaled glucose+glycogen")
+plot(dosages$SMI,log(dosages$lipides),ylab="SMI (g)",xlab="Lipids")
+plot(dosages$SMI,log(dosages$sumLGly),ylab="SMI (g)",xlab="Glucose+glycogen")
+plot(dosages$SMI,log(dosages$SLipides),ylab="SMI (g)",xlab="Scaled lipids")
+plot(dosages$SMI,log(dosages$SsumLGly),ylab="SMI (g)",xlab="Scaled glucose+glycogen")
+```
+
+## The relevance of structural size and body condition as predictors of fitness in an insect model
+
+We assessed five different models of female fecundity: fecundity according to body mass, fecundity according to structural size (elytron length), fecundity according to body condition (SMI), fecundity according to both structural size and body condition and the null model.
+
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+Fecond$TreatAdult<-factor(Fecond$TreatAdult, c("PN","N"))
+Fecond$TreatAdult
+
+MNull<-glm.nb(eggs~1,na.action=na.fail,data=Fecond)
+M5<-glm.nb(eggs~MSL,na.action=na.fail,data=Fecond)
+M6<-glm.nb(eggs~poids,na.action=na.fail,data=Fecond)
+M7<-glm.nb(eggs~moyLong,na.action=na.fail,data=Fecond)
+M8<-glm.nb(eggs~poids+moyLong,na.action=na.fail,data=Fecond)
+M9<-glm.nb(eggs~MSL+moyLong,na.action=na.fail,data=Fecond)
+
+cor.test(Fecond$moyLong,Fecond$poids)
+vif(M8)
+ModelSel<-model.sel(MNull,M5,M6,M7,M8,M9, rank = AICc)
+R2<-c(r.squaredLR(M9),r.squaredLR(M8),r.squaredLR(M6),r.squaredLR(M5),r.squaredLR(MNull),r.squaredLR(M7))
+ModelSel$R2<-R2
+ModelSel
+
+write.table(ModelSel,"/home/mark/Dropbox/condition/ANALYSE/FinalAnalysis/ModelSel6models.txt")
+
+
+partial.r<-function(t.val,df){
+  r<-t.val/sqrt((t.val)^2+df)
+  names(r)<-"effect size r"
+  return(r)
+}
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],218))
+}
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~poids))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+Poids<-as.numeric(results$t0)
+minci.Poids<-Boot$bca[,4]
+maxci.Poids<-Boot$bca[,5]
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~moyLong))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+Long<-as.numeric(results$t0)
+minci.Long<-Boot$bca[,4]
+maxci.Long<-Boot$bca[,5]
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~MSL))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+msl<-as.numeric(results$t0)
+minci.msl<-Boot$bca[,4]
+maxci.msl<-Boot$bca[,5]
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],218))
+}
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~moyLong+MSL))
+(Boot<-boot.ci(results, type="bca"))
+
+LengthCMSL<-as.numeric(results$t0)
+minci.LengthCMSL<-Boot$bca[,4]
+maxci.LengthCMSL<-Boot$bca[,5]
+
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[3,3],218))
+}
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~moyLong+MSL))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+MSLCLength<-as.numeric(results$t0)
+minci.MSLCLength<-Boot$bca[,4]
+maxci.MSLCLength<-Boot$bca[,5]
+
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],218))
+}
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~moyLong+poids))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+LengthMass<-as.numeric(results$t0)
+minci.LengthMass<-Boot$bca[,4]
+maxci.LengthMass<-Boot$bca[,5]
+
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[3,3],218))
+}
+
+(results <- boot(data=Fecond, statistic=r.part,R=10000, formula=eggs~moyLong+poids))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+MassCLength<-as.numeric(results$t0)
+minci.MassCLength<-Boot$bca[,4]
+maxci.MassCLength<-Boot$bca[,5]
+
+
+
+
+df<-data.frame(effect.size=c(MSLCLength,msl,LengthCMSL,LengthMass,Long,MassCLength,Poids), minci=c(minci.MSLCLength,minci.msl,minci.LengthCMSL,minci.LengthMass, minci.Long,minci.MassCLength, minci.Poids),maxci=c(maxci.MSLCLength,maxci.msl,maxci.LengthCMSL,maxci.LengthMass, maxci.Long,maxci.MassCLength, maxci.Poids),lev.names=c("SMI\n(controlled for elytron length)","SMI","Elytron length\n(controlled for SMI)","Elytron Length\n(controlled for body mass)","Elytron length","Body mass\n(controlled for elytron length)","Body mass"))  
+df
+
+df$lev.names2 <- factor(df$lev.names, as.character(df$lev.names))
+
+
+p_new<-ggplot(df,aes(lev.names2, effect.size))
+p_new <- p_new + geom_hline(yintercept=0,lty=2) + geom_errorbar(aes(ymin=minci, ymax=maxci), width=0,color="black") + geom_point(aes(size=2)) 
+p_new <- p_new + guides(size=FALSE,shape=FALSE) + scale_shape_manual(values=c(16,16,16,1,1,1))
+p_new <- p_new + theme_bw() + xlab("Morphological measure/Body condition index") + ylab(expression(paste("Effect size",italic(' r'))))
+p_new <- p_new + theme(axis.text.x=element_text(size=rel(1.5)),
+               axis.title.y=element_text(size=rel(1.2)),
+               axis.title.x=element_text(size=rel(1.2)),
+               axis.text.y=element_text(size=rel(1.5)),
+               panel.grid.minor=element_blank(),
+               panel.grid.major.x=element_blank())
+
+p_new <- p_new+ coord_flip()+theme(text = element_text(size=15))
+
+png("/home/mark/Dropbox/condition/apres JEB/SuppCoefPlotEffectNew.png",width=3200, height=3200,res=300)
+(p_new+geom_text(aes(label=round(effect.size,3)), vjust=-0.8,size=5))
+dev.off()
+
+(p_new+geom_text(aes(label=round(effect.size,3)), vjust=-0.8,size=5))
+```
+
+## Is the cost of size on fitness dependent on resource availability during the larval and adult stages?
+
+In this next section, we investigated whether the effect of food limitation at the larval and/or adult stage changes the relationship between fecundity and elytron length/mass/body condition. We expected that food limitation at the larval and/or the adult stage would accentuate a potential cost to structural size and we therefore expected statistical support for the effect of an interaction between body condition and feeding treatment on fecundity.
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+M5.nb<-glm.nb(eggs~milieu*moyLong+milieu*MSL,na.action=na.fail,data=Fecond)
+(gg5.nb <- dredge(M5.nb,rank="AICc", extra="R^2"))
+M6.nb<-glm.nb(eggs~milieu*poids,na.action=na.fail,data=Fecond)
+
+F1.nb<-glm.nb(eggs~moyLong+milieu*MSL,na.action=na.fail,data=Fecond)
+F2.nb<-glm.nb(eggs~milieu*moyLong+milieu*MSL,na.action=na.fail,data=Fecond)
+F3.nb<-glm.nb(eggs~milieu+moyLong+MSL,na.action=na.fail,data=Fecond)
+F4.nb<-glm.nb(eggs~milieu*moyLong+MSL,na.action=na.fail,data=Fecond)
+F5.nb<-glm.nb(eggs~milieu*MSL,na.action=na.fail,data=Fecond)
+F6.nb<-glm.nb(eggs~milieu+poids,na.action=na.fail,data=Fecond)
+F7.nb<-glm.nb(eggs~milieu+MSL,na.action=na.fail,data=Fecond)
+F8.nb<-glm.nb(eggs~milieu*poids,na.action=na.fail,data=Fecond)
+F9.nb<-glm.nb(eggs~milieu+moyLong,na.action=na.fail,data=Fecond)
+F10.nb<-glm.nb(eggs~milieu,na.action=na.fail,data=Fecond)
+F11.nb<-glm.nb(eggs~milieu*moyLong,na.action=na.fail,data=Fecond)
+F12.nb<-glm.nb(eggs~moyLong+MSL,na.action=na.fail,data=Fecond)
+F13.nb<-glm.nb(eggs~poids,na.action=na.fail,data=Fecond)
+F14.nb<-glm.nb(eggs~MSL,na.action=na.fail,data=Fecond)
+F15.nb<-glm.nb(eggs~1,na.action=na.fail,data=Fecond)
+F16.nb<-glm.nb(eggs~moyLong,na.action=na.fail,data=Fecond)
+
+(ModelSel<-model.sel(F1.nb,F2.nb,F3.nb,F4.nb,F5.nb,F6.nb,F7.nb,F8.nb,F9.nb,F10.nb,F11.nb,F12.nb,F13.nb,F14.nb,F15.nb,F16.nb, rank = AICc))
+
+
+R2<-c(r.squaredLR(F1.nb),r.squaredLR(F2.nb),r.squaredLR(F3.nb),r.squaredLR(F4.nb),r.squaredLR(F5.nb),r.squaredLR(F6.nb),r.squaredLR(F7.nb),r.squaredLR(F8.nb),r.squaredLR(F9.nb),r.squaredLR(F10.nb),r.squaredLR(F11.nb),r.squaredLR(F12.nb),r.squaredLR(F13.nb),r.squaredLR(F14.nb),r.squaredLR(F15.nb),r.squaredLR(F16.nb))
+  
+ModelSel$R2<-R2
+
+write.table(ModelSel, "/home/mark/Dropbox/condition/ANALYSE/FinalAnalysis/eggsMSLLong.txt", sep="\t")
+```
+
+Effect sizes of different effects
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],51))
+}
+
+(results <- boot(data=Fecond[which(Fecond$milieu=="NlPNa"),], statistic=r.part,R=10000, formula=eggs~MSL+moyLong))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],53))
+}
+
+(results <- boot(data=Fecond[which(Fecond$milieu=="NlNa"),], statistic=r.part,R=10000, formula=eggs~MSL+moyLong))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],52))
+}
+
+(results <- boot(data=Fecond[which(Fecond$milieu=="PNlNa"),], statistic=r.part,R=10000, formula=eggs~MSL+moyLong))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+
+r.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- glm.nb(formula,data=d)
+  return(partial.r(coef(summary(fit))[2,3],53))
+}
+
+(results <- boot(data=Fecond[which(Fecond$milieu=="PNlPNa"),], statistic=r.part,R=10000, formula=eggs~MSL+moyLong))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+
+partial.d<-function(t.val,df,n1,n2){
+  d<-t.val*(n1+n2)/(sqrt(n1*n2)*sqrt(df))
+  names(d)<-"effect size d"
+  return(d)
+}
+
+d.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- lm(formula,data=d)
+  return(partial.d(coef(summary(fit))[2,3],325,182,145))
+}
+
+# bootstrapping with 10000 replications
+(results <- boot(data=INDICES, statistic=d.part,R=10000, formula=moyLong~TreatLarve))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+d.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- lm(formula,data=d)
+  return(partial.d(coef(summary(fit))[2,3],325,182,145))
+}
+
+# bootstrapping with 10000 replications
+(results <- boot(data=INDICES, statistic=d.part,R=10000, formula=poids~TreatLarve))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+
+d.part <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- lm(formula,data=d)
+  return(partial.d(coef(summary(fit))[2,3],325,182,145))
+}
+
+# bootstrapping with 10000 replications
+(results <- boot(data=INDICES, statistic=d.part,R=10000, formula=SMI~TreatLarve))
+set.seed(1)
+(Boot<-boot.ci(results, type="bca"))
+
+```
+
+We assessed differences in homogeneity of variance in elytron size, mass and SMI between larval treatments using the Fligner-Killeen test. We then assessed mean differences between larval treatment groups using linear models for elytron length and mass and a general least square (GLS) model for SMI to control for significant heterogeneity
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+fligner.test(SMI~TreatLarve,data=INDICES)
+fligner.test(moyLong~TreatLarve,data=INDICES)
+fligner.test(poids~TreatLarve,data=INDICES)
+
+
+library(nlme)
+
+M3<-gls(SMI~TreatLarve,data=INDICES, weights = varIdent(form = ~1 | TreatLarve),na.action=na.fail)
+anova(M3)
+
+```
+
+Plot fitness effects as a function of feeding treatment
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+Fecond$fmilieu<-factor(Fecond$milieu)
+M10.nb<-glm.nb(eggs~fmilieu+MSL+moyLong,na.action=na.fail,data=Fecond)
+tuk <- glht(M10.nb, linfct = mcp(fmilieu = "Tukey"))
+summary(tuk)
+
+SumTuk<-data.frame(cbind(Estimates=summary(tuk)$test$coefficients,Std.Error=summary(tuk)$test$sigma,zvalue=summary(tuk)$test$tstat,pvalues=summary(tuk)$test$pvalues),group1=c("NlNa","NlPNa","PNlNa","NlPNa","PNlNa","PNlNa"),group2=c("PNlPNa","PNlPNa","PNlPNa","NlNa","NlNa","NlPNa"))
+
+SumTuk$p.adj<-finalfit::p_tidy(SumTuk$pvalues, digits = 3)
+
+Eggs<-ggplot(Fecond, aes(y=eggs,x=milieu))+geom_boxplot(outlier.shape = NA,aes(colour=milieu),show.legend = FALSE)+geom_jitter(position = position_jitter(0.1),aes(colour=milieu),size=4)+theme_bw()+scale_colour_manual(values=c("black","grey","red","rosybrown1"),name="Feeding treatment:", breaks=c("NlNa","NlPNa","PNlNa","PNlPNa"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult"))+ labs(x = "Feeding treatment", y = "Total fecundity (total number of eggs)")+ scale_x_discrete(labels=c("NlNa" = "Rich larval/Rich adult", "NlPNa" = "Rich larval/Poor adult","PNlNa" = "Poor larval/Rich adult","PNlPNa" = "Poor larval/Poor adult"))+ theme(plot.title = element_text(size = rel(1.5)),axis.text.y = element_text(size = rel(1.5)),axis.text.x = element_text(size = rel(1.2)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+stat_pvalue_manual(SumTuk, label = "p {p.adj}", y.position = c(210, 225, 235, 245, 255 ,265),size=5)
+
+Eggs+ theme(legend.position="none")
+
+png("/home/mark/Dropbox/condition/apres JEB/FigureBoxplotOeufsMilieuNew.png",width=2100, height=2100,res=300)
+
+Eggs+ theme(legend.position="none")
+
+dev.off()
+```
+
+Plot fitness effects as a function of feeding treatment and body mass/elytron length/SMI.
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+Fit <- glm.nb(eggs~poids+TreatLarve+TreatAdult,na.action=na.fail,data=Fecond)
+newdat = data.frame(TreatAdult = Fecond$TreatAdult,poids=Fecond$poids,eggs=Fecond$eggs,TreatLarve=Fecond$TreatLarve)
+pred = predict(Fit, newdata = newdat, level = 0, interval = "confidence")
+des = model.matrix(formula("~poids+TreatAdult+TreatLarve"), newdat)
+predvar = diag( des %*% vcov(Fit) %*% t(des) )
+newdat$lower = with(newdat, pred - 1.96*sqrt(predvar) )
+newdat$upper = with(newdat, pred + 1.96*sqrt(predvar) )
+newdat$Treat<-factor(interaction(newdat$TreatLarve,newdat$TreatAdult))
+
+
+(Eggspoids<-ggplot(newdat, aes(x = poids, y = eggs, color=Treat))+ geom_point(aes(x=poids, y = eggs),size=3)+ geom_ribbon(data = newdat, aes(y = NULL, ymin = exp(lower), ymax = exp(upper),color = NULL, fill = Treat), alpha = .15) + geom_line(data = newdat, aes(y = exp(pred)), size = 1) + theme_bw()+scale_colour_manual(values=c("black","grey","red","rosybrown1"),name="Feeding treatment:", breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult"))+ theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+ labs(x = "Mass (mg)", y = "Total fecundity\n(total number of eggs)")+scale_fill_manual(values=c("black","grey","red","rosybrown1"), name="fill",guide=FALSE, breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult")))
+
+Fit <- glm.nb(eggs~moyLong+TreatLarve+TreatAdult,na.action=na.fail,data=Fecond)
+newdat = data.frame(TreatAdult = Fecond$TreatAdult,moyLong=Fecond$moyLong,eggs=Fecond$eggs,TreatLarve=Fecond$TreatLarve)
+pred = predict(Fit, newdata = newdat, level = 0, interval = "confidence")
+newdat<-cbind(newdat,pred)
+des = model.matrix(formula("~moyLong+TreatAdult+TreatLarve"), newdat)
+predvar = diag( des %*% vcov(Fit) %*% t(des) )
+newdat$lower = with(newdat, pred - 1.96*sqrt(predvar) )
+newdat$upper = with(newdat, pred + 1.96*sqrt(predvar) )
+newdat$Treat<-factor(interaction(newdat$TreatLarve,newdat$TreatAdult))
+
+
+(EggsmoyLong<-ggplot(newdat, aes(x = moyLong, y = eggs, color=Treat))+ geom_point(aes(x=moyLong, y = eggs),size=3)+ geom_ribbon(data = newdat, aes(y = NULL, ymin = exp(lower), ymax = exp(upper),color = NULL, fill = Treat), alpha = .15) + geom_line(data = newdat, aes(y = exp(pred)), size = 1) + theme_bw() +scale_colour_manual(values=c("black","grey","red","rosybrown1"),name="Feeding treatment:", breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult")) + theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+ labs(x = "Elytron length (mm)", y = "Total fecundity\n(total number of eggs)")+scale_fill_manual(values=c("black","grey","red","rosybrown1"), name="fill",guide=FALSE, breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult")))
+
+Fit <- glm.nb(eggs~MSL*TreatLarve+TreatAdult,na.action=na.fail,data=Fecond)
+newdat = data.frame(TreatAdult = Fecond$TreatAdult,MSL=Fecond$MSL,eggs=Fecond$eggs,TreatLarve=Fecond$TreatLarve)
+pred = predict(Fit, newdata = newdat, level = 0, interval = "confidence")
+newdat<-cbind(newdat,pred)
+des = model.matrix(formula("~MSL*TreatLarve+TreatAdult"), newdat)
+predvar = diag( des %*% vcov(Fit) %*% t(des) )
+newdat$lower = with(newdat, pred - 1.96*sqrt(predvar) )
+newdat$upper = with(newdat, pred + 1.96*sqrt(predvar) )
+newdat$Treat<-factor(interaction(newdat$TreatLarve,newdat$TreatAdult))
+
+
+
+(EggsSMI<-ggplot(newdat, aes(x = MSL, y = eggs, color=Treat))+ geom_point(aes(x=MSL, y = eggs),size=3)+ geom_ribbon(data = newdat, aes(y = NULL, ymin = exp(lower), ymax = exp(upper),color = NULL, fill = Treat), alpha = .15) + geom_line(data = newdat, aes(y = exp(pred)), size = 1) + theme_bw()+scale_colour_manual(values=c("black","grey","red","rosybrown1"),name="Feeding treatment:", breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult"),guide=guide_legend(ncol=2)) + theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+ labs(x = "SMI (mg)", y = "Total fecundity\n(total number of eggs)")+scale_fill_manual(values=c("black","grey","red","rosybrown1"), name="fill",guide=FALSE, breaks=c("N.N","N.PN","PN.N","PN.PN"),labels=c("Rich larval/Rich adult","Rich larval/Poor adult","Poor larval/Rich adult","Poor larval/Poor adult"))+theme(legend.position="bottom", legend.text=element_text(size = rel(1)), legend.title=element_text(size= rel(1))))
+```
+
+
+
+
+Plot densities
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+cdat <- INDICES %>%
+  group_by(TreatLarve) %>%
+  summarise(poids.mean = mean(poids),
+            sem = sd(poids)/sqrt(length(poids)),
+            upper.95=quantile(poids,probs=c(0.975)),
+            lower.95=quantile(poids,probs=c(0.025)),
+            ci.low = mean(poids) - 1.96*sem,
+            ci.upp = mean(poids) + 1.96*sem)
+cdat
+
+
+cdat.dens <- ggplot_build(ggplot(INDICES, aes(x=poids, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl"))%>%left_join(cdat) %>%
+  dplyr::select(y, x, TreatLarve, poids.mean, sem, ci.low, ci.upp) %>%
+  dplyr::group_by(TreatLarve) %>%
+  dplyr::mutate(dens.mean = approx(x, y, xout = poids.mean)[[2]],
+         dens.cilow = approx(x, y, xout = ci.low)[[2]],
+         dens.ciupp = approx(x, y, xout = ci.upp)[[2]]) %>%
+   dplyr::select(-y, -x) %>%
+  slice(1)
+
+ribbon <- ggplot_build(ggplot(INDICES, aes(x=poids, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl")) %>%
+  left_join(cdat.dens) %>%
+  group_by(TreatLarve) %>%
+  filter(x >= ci.low & x <= ci.upp) %>%
+  dplyr::select(TreatLarve, x, y)
+
+
+ribbon <- rbind(data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.low[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.low[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)), as.data.frame(ribbon),               data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.upp[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.upp[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)))
+
+names(ribbon)
+
+label2<-expression(~"\tF"[1][", "][325]~"= 6.648; p = 0.010")
+
+
+
+(DensityMass<-ggplot() + geom_density(data = INDICES, aes(x = poids, colour = TreatLarve))+ geom_rug(data = INDICES, aes(x = poids, colour = TreatLarve)) + geom_polygon(data = ribbon, aes(x = x, y =y, fill = TreatLarve), alpha = .2) + geom_segment(data = cdat.dens, aes(x = poids.mean, xend = poids.mean, y = 0, yend = dens.mean, colour = TreatLarve), linetype = "dashed", size = 1)+theme_bw()+ scale_colour_manual(values=c("black","red"),name="Feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval"))+scale_fill_manual(values=c("black","red"),name="Feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval"))+ annotate(geom = 'text', x = -Inf, y = Inf, label = "\tFligner-Killeen Test of Homogeneity of Variances:\n\tchi-squared = 0.289, p-value = 0.591 \n\tLinear model (LM):", hjust = 0, vjust = 1.25,size=rel(4))+ annotate(geom = 'text', x = -Inf, y = Inf, label = label2, hjust = 0, vjust = 5.75,size=rel(4))+ theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+xlab("Mass (mg)")+ylab("Density")+ylim(0,0.035))
+
+
+
+
+
+cdat <- INDICES %>%
+  group_by(TreatLarve) %>%
+  summarise(moyLong.mean = mean(moyLong),
+            sem = sd(moyLong)/sqrt(length(moyLong)),
+            upper.95=quantile(moyLong,probs=c(0.975)),
+            lower.95=quantile(moyLong,probs=c(0.025)),
+            ci.low = mean(moyLong) - 1.96*sem,
+            ci.upp = mean(moyLong) + 1.96*sem)
+cdat
+
+
+cdat.dens <- ggplot_build(ggplot(INDICES, aes(x=moyLong, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl"))%>%left_join(cdat) %>%
+  dplyr::select(y, x, TreatLarve, moyLong.mean, sem, ci.low, ci.upp) %>%
+  dplyr::group_by(TreatLarve) %>%
+  dplyr::mutate(dens.mean = approx(x, y, xout = moyLong.mean)[[2]],
+         dens.cilow = approx(x, y, xout = ci.low)[[2]],
+         dens.ciupp = approx(x, y, xout = ci.upp)[[2]]) %>%
+  dplyr::select(-y, -x) %>%
+  slice(1)
+
+ribbon <- ggplot_build(ggplot(INDICES, aes(x=moyLong, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl")) %>%
+  left_join(cdat.dens) %>%
+  group_by(TreatLarve) %>%
+  filter(x >= ci.low & x <= ci.upp) %>%
+  dplyr::select(TreatLarve, x, y)
+
+
+ribbon <- rbind(data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.low[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.low[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)), as.data.frame(ribbon),               data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.upp[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.upp[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)))
+
+names(ribbon)
+
+label2<-expression(~"\tF"[1][", "][325]~"= 10.069; p = 0.002")
+
+
+
+(DensityLong<-ggplot() + geom_density(data = INDICES, aes(x = moyLong, colour = TreatLarve))+ geom_rug(data = INDICES, aes(x = moyLong, colour = TreatLarve))+ geom_polygon(data = ribbon, aes(x = x, y =y, fill = TreatLarve), alpha = .2) + geom_segment(data = cdat.dens, aes(x = moyLong.mean, xend = moyLong.mean, y = 0, yend = dens.mean, colour = TreatLarve), linetype = "dashed", size = 1)+theme_bw()+ scale_colour_manual(values=c("black","red"),name="Larval feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval"))+ scale_fill_manual(values=c("black","red"),name="Larval feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval")) + annotate(geom = 'text', x = -Inf, y = Inf, label = "\tFligner-Killeen Test:\n\t chi-squared = 0.101, p-value = 0.378 \n\tLinear model (LM):", hjust = 0, vjust = 1.25,size=rel(4)) + annotate(geom = 'text', x = -Inf, y = Inf, label = label2, hjust = 0, vjust = 5.75,size=rel(4)) + theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+xlab("Elytron length (mm)")+ylab("Density")+ylim(0,1.1))
+
+
+
+
+
+cdat <- INDICES %>%
+  group_by(TreatLarve) %>%
+  summarise(SMI.mean = mean(SMI),
+            sem = sd(SMI)/sqrt(length(SMI)),
+            upper.95=quantile(SMI,probs=c(0.975)),
+            lower.95=quantile(SMI,probs=c(0.025)),
+            ci.low = mean(SMI) - 1.96*sem,
+            ci.upp = mean(SMI) + 1.96*sem)
+cdat
+
+cdat.dens <- ggplot_build(ggplot(INDICES, aes(x=SMI, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl"))%>%left_join(cdat) %>%
+  dplyr::select(y, x, TreatLarve, SMI.mean, sem, ci.low, ci.upp) %>%
+  dplyr::group_by(TreatLarve) %>%
+  dplyr::mutate(dens.mean = approx(x, y, xout = SMI.mean)[[2]],
+         dens.cilow = approx(x, y, xout = ci.low)[[2]],
+         dens.ciupp = approx(x, y, xout = ci.upp)[[2]]) %>%
+  dplyr::select(-y, -x) %>%
+  slice(1)
+
+ribbon <- ggplot_build(ggplot(INDICES, aes(x=SMI, colour=TreatLarve)) + geom_density())$data[[1]] %>%
+  mutate(TreatLarve = ifelse(group == 1, "Nl", "PNl")) %>%
+  left_join(cdat.dens) %>%
+  dplyr::group_by(TreatLarve) %>%
+  filter(x >= ci.low & x <= ci.upp) %>%
+  dplyr::select(TreatLarve, x, y)
+
+
+ribbon <- rbind(data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.low[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.low[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)), as.data.frame(ribbon), data.frame(TreatLarve = c("Nl", "PNl"), x = c(cdat.dens$ci.upp[cdat.dens$TreatLarve=="Nl"], cdat.dens$ci.upp[cdat.dens$TreatLarve=="PNl"]), y = c(0, 0)))
+
+names(ribbon)
+
+label2<-expression(~"\tF"[1][", "][325]~"= 0.833; p = 0.362")
+
+(DensitySMI<-ggplot() + geom_density(data = INDICES, aes(x = SMI, colour = TreatLarve))+ geom_rug(data = INDICES, aes(x = SMI, colour = TreatLarve)) + geom_polygon(data = ribbon, aes(x = x, y =y, fill = TreatLarve), alpha = .2) + geom_segment(data = cdat.dens, aes(x = SMI.mean, xend = SMI.mean, y = 0, yend = dens.mean, colour = TreatLarve), linetype = "dashed", size = 1)+ theme_bw()+ scale_colour_manual(values=c("black","red"),name="Feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval"))+ scale_fill_manual(values=c("black","red"),name="Feeding treatment:", breaks=c("Nl","PNl"),labels=c("Rich larval","Poor larval"))+ annotate(geom = 'text', x = -Inf, y = Inf, label = "\tFligner-Killeen Test of Homogeneity of Variances:\n\tchi-squared = 9.712, p-value = 0.002 \n\tGeneralized least squares (GLS):", hjust = 0, vjust = 1.25,size=rel(4))+ annotate(geom = 'text', x = -Inf, y = Inf, label = label2, hjust = 0, vjust = 5.75,size=rel(4))+ theme(plot.title = element_text(size = rel(1.5)),axis.text = element_text(size = rel(1.5)), axis.title.x = element_text(size = rel(1.5)), axis.title.y = element_text(size=rel(1.5)), legend.text=element_text(size = rel(1)), legend.title=element_text(size= rel(1)),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.line = element_line(colour = "black"))+xlab("SMI (mg)")+ylab("Density")+ylim(0,0.069))
+```
+
+
+Panel figure
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+
+
+legend=gtable_filter(ggplotGrob(EggsmoyLong+theme(legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)))), "guide-box")
+legend2=gtable_filter(ggplotGrob(DensityLong+theme(legend.text=element_text(size = rel(1.5)), legend.title=element_text(size= rel(1.5)))), "guide-box")
+
+
+png("/home/mark/Dropbox/condition/apres JEB/TotalFecondTraitSelection.png",height=4200, width=4200,res=300)
+pushViewport(viewport(layout = grid.layout(24, 20)))
+vplayout <- function(x, y) viewport(layout.pos.row = x, layout.pos.col = y)
+
+
+print(DensityMass+ theme(legend.position="none")+ggtitle("a."), vp = vplayout(1:7, 1:8))
+print(DensityLong+ theme(legend.position="none")+ggtitle("b."), vp = vplayout(8:14, 1:8))
+print(DensitySMI+ theme(legend.position="none")+ggtitle("c."), vp = vplayout(15:21, 1:8))
+legend2$vp = viewport(layout.pos.row = 22:23, layout.pos.col = 1:9)
+grid.draw(legend2)
+
+
+print(Eggspoids+ theme(legend.position="none")+ggtitle("d."), vp = vplayout(1:7, 10:19))
+print(EggsmoyLong+ theme(legend.position="none")+ggtitle("f."),vp = vplayout(8:14, 10:19))
+print(EggsSMI+ theme(legend.position="none")+ggtitle("f."), vp = vplayout(15:21, 10:19))
+legend$vp = viewport(layout.pos.row = 22:24, layout.pos.col = 9:20)
+grid.draw(legend)
+
+dev.off()
+
+```
+
+
+
+## Supplementary information
+
+Relationship between mass and elytron size according to OLS, SMA and MA
+regressions.
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+INDICES$lpoids<-log10(INDICES$poids)
+INDICES$lmoyLong<-log10(INDICES$moyLong)
+
+M1<-lmodel2(lpoids~lmoyLong,data=INDICES)
+M1
+
+
+
+reg <- (M1$regression.results)
+CI<-(M1$confidence.intervals)
+reg<-merge(reg,CI,by="Method")
+# Rename columns in reg so they're easy to use
+names(reg) <- c("method", "intercept", "slope", "angle", "p-value","low.intercept","high.intercept","low.slope","high.slope")
+# Check that the regressions look like so we know what will be plots
+print(reg)
+
+M2 <- sma(poids~moyLong ,log="xy",data=INDICES)
+M3 <- ma(poids~moyLong ,log="xy",data=INDICES)
+
+INDICES$SMAresid<-residuals(M2)
+INDICES$MAresid<-residuals(M3)
+
+p1<-ggplot() + geom_point(data = INDICES, aes(x=lmoyLong,y=lpoids)) +geom_abline(data = reg, aes(intercept = intercept, slope = slope, colour =method), show.legend = TRUE)+theme_classic(base_size = 14)+ scale_color_manual(values=c("gray","black","red"))+ labs(x = "log (Elytron length)", y = "log (Mass)")+ggtitle("a.")
+p1
+
+MSLMA<- INDICES$poids*((mean(INDICES$moyLong)/INDICES$moyLong)^3.536462)
+
+INDICES$MSLMA<-MSLMA
+
+p2<-ggscatter(INDICES, x = "lpoids", y = "OLS", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Mass)", ylab = "OLS residuals", cor.coef.size = 4)+ggtitle("c.")+  theme_classic(base_size = 14)
+p2
+
+p3<-ggscatter(INDICES, x = "lpoids", y = "SMAresid", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Mass)", ylab = "SMA residuals", cor.coef.size = 4)+ggtitle("d.")+  theme_classic(base_size = 14)
+p3
+
+p3a<-ggscatter(INDICES, x = "lpoids", y = "MAresid", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Mass)", ylab = "MA residuals", cor.coef.size = 4)+ggtitle("e.")+  theme_classic(base_size = 14)
+p3a
+
+
+p4<-ggscatter(INDICES, x = "lmoyLong", y = "OLS", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Elytron length)", ylab = "OLS residuals", cor.coef.size = 4)+ggtitle("f.")+  theme_classic(base_size = 14)
+p4
+
+p5<-ggscatter(INDICES, x = "lmoyLong", y = "SMAresid", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Elytron length)", ylab = "SMA residuals", cor.coef.size = 4)+ggtitle("g.")+  theme_classic(base_size = 14)
+p5
+
+
+p5a<-ggscatter(INDICES, x = "lmoyLong", y = "MAresid", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(Elytron length)", ylab = "MA residuals", cor.coef.size = 4)+ggtitle("h.")+  theme_classic(base_size = 14)
+p5a
+
+
+INDICES$lSMAresid<-log10(INDICES$SMAresid+1)
+INDICES$lMSL<-log10(INDICES$MSL)
+
+
+p7a<-ggscatter(INDICES, x = "lMSL", y = "SMAresid", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "log(SMI)", ylab = "SMA residuals", cor.coef.size = 4)+ggtitle("b.")+  theme_classic(base_size = 14)
+p7a
+
+png("/home/mark/Dropbox/condition/apres JEB/FigureCorrelationPoidsTailleBCIa.png",width=2970, height=2970,res=300)
+
+pushViewport(viewport(layout = grid.layout(3, 3)))
+vplayout <- function(x, y) viewport(layout.pos.row = x, layout.pos.col = y)
+
+print(p1, vp = vplayout(1, 1:2))
+print(p7a, vp = vplayout(1, 3))
+print(p2, vp = vplayout(2, 1))
+print(p3, vp = vplayout(2, 2))
+print(p3a, vp = vplayout(2, 3))
+print(p4, vp = vplayout(3, 1))
+print(p5, vp = vplayout(3, 2))
+print(p5a, vp = vplayout(3, 3))
+
+dev.off()
+
+```
+
+## Proportion of dead T. molitor females by the end of the experiment according to the larval and adult feeding treatments. 
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+setwd("/home/mark/Dropbox/condition/ANALYSE/FinalAnalysis")
+
+Mortalite= read.csv(file = "MortalityTreament.csv", header = TRUE)
+Mortalite<-Mortalite[!is.na(Mortalite$poids)==TRUE,]
+
+
+M2 <- sma(poids~longueur ,log="xy",data=Mortalite)
+Mortalite$SMI<- Mortalite$poids*((mean(Mortalite$longueur)/Mortalite$longueur)^M2$groupsummary$Slope)
+
+
+
+M1<-glm(Mort~longueur+milieu*SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M2<-glm(Mort~milieu*longueur+milieu*SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M3<-glm(Mort~milieu+longueur+SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M4<-glm(Mort~milieu*longueur+SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M5<-glm(Mort~milieu*SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M6<-glm(Mort~milieu+poids,family=binomial,na.action=na.fail,data=Mortalite)
+M7<-glm(Mort~milieu+SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M8<-glm(Mort~milieu*poids,family=binomial,na.action=na.fail,data=Mortalite)
+M9<-glm(Mort~milieu+longueur,family=binomial,na.action=na.fail,data=Mortalite)
+M10<-glm(Mort~milieu,family=binomial,na.action=na.fail,data=Mortalite)
+M11<-glm(Mort~milieu*longueur,family=binomial,na.action=na.fail,data=Mortalite)
+M12<-glm(Mort~longueur+SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M13<-glm(Mort~poids,family=binomial,na.action=na.fail,data=Mortalite)
+M14<-glm(Mort~SMI,family=binomial,na.action=na.fail,data=Mortalite)
+M15<-glm(Mort~1,family=binomial,na.action=na.fail,data=Mortalite)
+M16<-glm(Mort~longueur,family=binomial,na.action=na.fail,data=Mortalite)
+
+(ModelSel<-model.sel(M1,M2,M3,M4,M5,M6,M7,M8,M9,M10,M11,M12,M13,M14,M15,M16, rank = AICc))
+
+
+R2<-c(r.squaredLR(M10),r.squaredLR(M6),r.squaredLR(M9),r.squaredLR(M7),r.squaredLR(M3),r.squaredLR(M11),r.squaredLR(M4),r.squaredLR(M5),r.squaredLR(M8),r.squaredLR(M1),r.squaredLR(M2),r.squaredLR(M15),r.squaredLR(M16),r.squaredLR(M14),r.squaredLR(M13),r.squaredLR(M12))
+  
+ModelSel$R2<-R2
+
+write.table(ModelSel, "/home/mark/Dropbox/condition/ANALYSE/FinalAnalysis/Mortalite.txt", sep="\t")
+```
+
+```{r, message=FALSE, warning=FALSE, tidy=TRUE, tidy.opts=list(width.cutoff=45), paged.print=FALSE}
+tapply(Mortalite$Mort,Mortalite$milieu,sum)
+tapply(Mortalite$Mort,Mortalite$milieu,length)
+
+NlNa<-5/76
+NlPNa<-12/66
+PNlNa<-0/55
+PNlPNa<-1/57
+
+proportionMort<-data.frame(rbind(NlNa,NlPNa,PNlNa,PNlPNa))
+Treatment<-rbind("NlNa","NlPNa","PNlNa","PNlPNa")
+
+names(proportionMort)
+
+proportionMort$Mortalite<-proportionMort$rbind.NlNa..NlPNa..PNlNa..PNlPNa.
+proportionMort<-cbind(proportionMort,Treatment)[,2:3]
+proportionMort
+
+png("/home/mark/Dropbox/condition/ANALYSE/FigureMortaliteTreatment.png",width=2100, height=2100,res=200)
+
+ggplot(data=proportionMort,aes(y=Mortalite,x=Treatment,fill=Treatment))+geom_bar(stat="identity")+theme(axis.text.x = element_text(size = rel(1.8)),axis.text.y = element_text(size = rel(2)), axis.title.x = element_text(size = rel(2)), axis.title.y = element_text(size=rel(2)),panel.background = element_blank(),axis.line = element_line(colour = "black"),legend.position = c(.95, .95),legend.justification = c("right", "top"),legend.box.just = "right",legend.margin = margin(6, 6, 6, 6), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size = rel(2)))+labs(y="Adult mortality during experiment",x="Feeding treatment")+ geom_text(aes(label=round(Mortalite,2)), vjust=-0.1, color="black", size=rel(8))+ scale_x_discrete(labels=c("NlNa" = "Rich larval/Rich adult", "NlPna" = "Rich larval/Poor adult", "PnlNa" = "Poor larval/Rich adult","PnlPna" = "Poor larval/Poor adult"))+scale_fill_manual(values=c("black","grey","red","rosybrown1"),labels=c("NlNa" = "Rich larval/Rich adult", "NlPna" = "Rich larval/Poor adult", "PnlNa" = "Poor larval/Rich adult","PnlPna" = "Poor larval/Poor adult"),name="Feeding treatement")
+
+dev.off()
+
+ggplot(data=proportionMort,aes(y=Mortalite,x=Treatment,fill=Treatment))+geom_bar(stat="identity")+theme(axis.text.x = element_text(size = rel(1.8)),axis.text.y = element_text(size = rel(2)), axis.title.x = element_text(size = rel(2)), axis.title.y = element_text(size=rel(2)),panel.background = element_blank(),axis.line = element_line(colour = "black"),legend.position = c(.95, .95),legend.justification = c("right", "top"),legend.box.just = "right",legend.margin = margin(6, 6, 6, 6), legend.text=element_text(size = rel(1.5)), legend.title=element_text(size = rel(2)))+labs(y="Adult mortality during experiment",x="Feeding treatment")+ geom_text(aes(label=round(Mortalite,2)), vjust=-0.1, color="black", size=rel(8))+ scale_x_discrete(labels=c("NlNa" = "Rich larval/Rich adult", "NlPna" = "Rich larval/Poor adult", "PnlNa" = "Poor larval/Rich adult","PnlPna" = "Poor larval/Poor adult"))+scale_fill_manual(values=c("black","grey","red","rosybrown1"),labels=c("NlNa" = "Rich larval/Rich adult", "NlPna" = "Rich larval/Poor adult", "PnlNa" = "Poor larval/Rich adult","PnlPna" = "Poor larval/Poor adult"),name="Feeding treatement")
+```
